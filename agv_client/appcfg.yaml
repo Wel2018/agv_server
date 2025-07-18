@@ -1,0 +1,14 @@
+##################################
+# agv_controller app config
+# author: wel2018
+# date: 2025-07-18
+##################################
+
+# 详细日志
+VERBOSE: 1
+
+# debugpy 线程调试模式
+THREAD_DEBUG: 0
+
+# 性能测试
+BENCHMARK: 0
