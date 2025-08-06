@@ -3,7 +3,7 @@ import json
 import time
 from fastapi import APIRouter
 from fastapi import WebSocket
-from attrs import asdict, define, field
+# from attrs import asdict, define, field
 router = APIRouter()
 from config import AppConfig
 from agv_socket import AgvWrapper
@@ -52,11 +52,11 @@ def get_p():
     return create_reply(res)
 
 
-@router.get("/list_map_marker", summary="列举地图位置")
-def list_map_marker():
-    res = Controller.agv.list_map_marker()
+@router.get("/marker_query", summary="列举地图位置")
+def marker_query():
+    res = Controller.agv.marker_query()
     res = parse_res(res)
-    print(f"list_map_marker: {res}")
+    print(f"marker_query: {res}")
     return create_reply(res)
 
 @router.get("/list_map", summary="列举地图位置")
@@ -122,15 +122,28 @@ def velocity_control_stop():
     return create_reply(res)
 
 
-# @router.websocket("/get_curr_ws")
-# async def get_curr_ws(websocket: WebSocket):
-#     await websocket.accept()
-#     try:
-#         while True:
-#             arm = Controller.arm
-#             state = arm.get_curr()
-#             await websocket.send_text(json.dumps(state))
-#             # print(time.time(), state)
-#             await asyncio.sleep(5/1000)  # 每 5ms 发送一次
-#     except Exception as e:
-#         print("WebSocket closed:", e)
+@router.websocket("/velocity_control_ws")
+async def velocity_control_ws(websocket: WebSocket):
+    """实时速度控制，并实时返回机器人坐标和状态信息
+    当前只适配一个客户端的情况
+    """
+    await websocket.accept()
+    try:
+        while True:
+            # 实时速度控制
+            data = await websocket.receive_text()
+            cmd_dict: dict = eval(json.loads(data))
+            linear_v = cmd_dict.get("linear_v", 0)
+            angular_v = cmd_dict.get("angular_v", 0)
+            res = Controller.agv.velocity_control(linear_v, angular_v)
+            res = parse_res(res)
+            print(f"velocity_control: {res}")
+            
+            # 返回机器人坐标和状态信息
+            # data = json.dumps(data)
+            status = Controller.agv.get_robot_status()
+            await websocket.send_text(status)
+            # print(time.time(), state)
+            await asyncio.sleep(5/1000)  # 每 5ms 发送一次
+    except Exception as e:
+        print(f"[velocity_control_ws] error: {e}")
