@@ -8,7 +8,7 @@ from toolbox.qt import qtbase
 from .ui.ui_form import Ui_DemoWindow
 # from toolbox.robot.robot_collect import FrankaCollector
 # from .setting import SettingWindow
-from . import AppConfig, logger, VERBOSE, THREAD_DEBUG, APPCFG
+from . import AppConfig, logger
 # from .bgtask.spacemouse import SpaceMouseListener
 
 
@@ -32,25 +32,18 @@ class MainWindow(qtbase.IMainWindow):
 
     is_quit_confirm = 0  # 程序退出确认
     is_keyboard_ctrl = 1  # 键盘控制开关
-    is_collect_data = 0  # 数据集收集开关
-    is_gripper_open = 1  # 当前夹爪状态
     is_mirror = 0  # 是否镜像操控 
     is_debug = 0
-    is_going_to_init_pos = 0
     is_estop = 0
-    VERBOSE = VERBOSE
+    VERBOSE = AppConfig.VERBOSE
 
     def __init__(self, parent = None):
         ui = self.ui = Ui_DemoWindow()
         super().__init__(ui, parent)
-
-        # 初始化
         self.init(
-            confcache_name="agv_teleop",
-            apptitle=AppConfig.title,
             ui_logger=ui.txt_log,
             logger=logger,
-            fontsize=AppConfig.fontsize,
+            appcfg=AppConfig
         )
 
         # 子页面
@@ -66,7 +59,7 @@ class MainWindow(qtbase.IMainWindow):
 
         # 设置勾选状态
         self.set_check(ui.is_keyboard_ctrl, self.is_keyboard_ctrl)
-        self.set_check(ui.is_collect_data, self.is_collect_data)
+        # self.set_check(ui.is_collect_data, self.is_collect_data)
         self.set_check(ui.is_mirror, self.is_mirror)
         # self.bind_checked(ui.is_collect_data, self.collect_data)
         
