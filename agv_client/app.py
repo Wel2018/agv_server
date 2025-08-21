@@ -3,13 +3,9 @@ import threading
 import numpy as np
 from rich import print
 from toolbox.core.time_op import get_time_str
-# from toolbox.robot.franka_arm_client import FrankaArmClient
 from toolbox.qt import qtbase
 from .ui.ui_form import Ui_DemoWindow
-# from toolbox.robot.robot_collect import FrankaCollector
-# from .setting import SettingWindow
-from . import AppConfig, logger
-# from .bgtask.spacemouse import SpaceMouseListener
+from . import q_appcfg, logger
 
 
 class WorkMode:
@@ -26,46 +22,26 @@ class MainWindow(qtbase.IMainWindow):
     # 定时器和线程名称
     TH_COLLECT = "collect"
     TH_SYNC = "sync"
-    TH_CAM = "cam3d"
-    TH_CTL_MODE = "teleop_ctl_mode"
-    TIMER_ROBOT_STATE = "robot_state"
-
     is_quit_confirm = 0  # 程序退出确认
     is_keyboard_ctrl = 1  # 键盘控制开关
-    is_mirror = 0  # 是否镜像操控 
     is_debug = 0
     is_estop = 0
-    VERBOSE = AppConfig.VERBOSE
+    VERBOSE = q_appcfg.VERBOSE
 
-    def __init__(self, parent = None):
-        ui = self.ui = Ui_DemoWindow()
-        super().__init__(ui, parent)
-        self.init(
-            ui_logger=ui.txt_log,
-            logger=logger,
-            appcfg=AppConfig
-        )
-
-        # 子页面
-        # self.setting_wd = SettingWindow(self)
-        # self.kb_mapp = self.setting_wd.keyboard_mapp
-
+    def pre_init(self):
+        return super().pre_init()
+    
+    def post_init(self):
+        ui = self.ui
         # 绑定点击事件
         # self.bind_clicked(ui.btn_setting, lambda: self.setting_wd.showNormal())
         self.bind_clicked(ui.btn_clear, self.clean_log)
         self.bind_clicked(ui.btn_goto, self.play)
         self.bind_clicked(ui.btn_estop, self.estop)
         self.bind_clicked(ui.btn_cancel, self.cancel)
-
-        # 设置勾选状态
         self.set_check(ui.is_keyboard_ctrl, self.is_keyboard_ctrl)
-        # self.set_check(ui.is_collect_data, self.is_collect_data)
-        self.set_check(ui.is_mirror, self.is_mirror)
-        # self.bind_checked(ui.is_collect_data, self.collect_data)
-        
         self.mode = WorkMode.idle
-        
-        # 遥操作控制步长改变
+
         # 线速度、角速度
         self.pos_vel = ui.step_posi_vel.value()
         self.rot_vel = ui.step_angle_vel.value()
@@ -73,51 +49,43 @@ class MainWindow(qtbase.IMainWindow):
         
         # 在 lambda 表达式中不能使用赋值语句
         self.bind_val_changed(
-            ui.step_posi_vel, 
-            lambda val: \
+            ui.step_posi_vel, lambda val: \
                 setattr(self, 'pos_vel', round(val,3))
         )
         
         self.bind_val_changed(
-            ui.step_angle_vel, 
-            lambda val: \
+            ui.step_angle_vel, lambda val: \
                 setattr(self, 'rot_vel', round(val,3))
         )
-
-        # 摄像头
-        zero_img = np.zeros((480, 640, 3), dtype=np.uint8)
-        self.zero_img = qtbase.QPixmap(qtbase.cv2qt(zero_img))
-        self.reset_viz()
-
-        #self.tcost = Timecost(0, 1)
         self.pressed_keys = set()
         
-        # 机械臂控制 --------------------
-        # self.arm = FrankaArmClient()
-        # self.arm.gozero()
-
-        # 底盘控制 -------------------
+        # 初始化 agv
         from .agv import AgvHttpClient
         self.agv = AgvHttpClient()
-        #res = self.agv.get_robot_res()
-        #self.add_log(f"agv={res}")
         markers = self.agv.list_map_marker()
         mk = markers['results'].keys() # type: ignore
         print(mk)
         self.add_log(f"agv targets={mk}")
-        
         self.add_log("程序初始化完成")
-        
-        # 检查服务器是否能够正常连接
-        # self.add_timer(self.TIMER_ROBOT_STATE, 100, self.refresh_state, 1)
 
+    def init_cam(self):
+        zero_img = np.zeros((480, 640, 3), dtype=np.uint8)
+        self.zero_img = qtbase.QPixmap(qtbase.cv2qt(zero_img))
+        self.reset_viz()
+    
+    def __init__(self, parent = None):
+        ui = self.ui = Ui_DemoWindow()
+        super().__init__(ui, parent, q_appcfg)
+        self.pre_init()
+        self.init(ui_logger=ui.txt_log, logger=logger)
+        self.post_init()
+        self.init_cam()
 
     def play(self):
         """执行任务理解逻辑"""
         target = self.ui.target.text()
         self.add_log(f"agv goto {target}")
         self.agv.nav_to_target(target)
-
 
     def estop(self):
         if not self.is_estop:
