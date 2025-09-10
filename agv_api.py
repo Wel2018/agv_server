@@ -5,7 +5,6 @@ from fastapi import APIRouter
 from fastapi import WebSocket
 # from attrs import asdict, define, field
 router = APIRouter()
-from config import AppConfig
 from .sdk.agv_yunji import AgvYunjiWater
 from rich import print
 

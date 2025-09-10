@@ -5,22 +5,11 @@ import signal
 import uvicorn
 import logging
 from rich import print
-from config import AppConfig, get_origins
+from .config import AppConfig, get_origins
 
 from fastapi.staticfiles import StaticFiles
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import applications
-from fastapi.openapi.docs import get_swagger_ui_html
-
-
-def swagger_monkey_patch(*args, **kwargs):
-    return get_swagger_ui_html(
-        *args, **kwargs,
-        swagger_js_url="https://cdn.staticfile.net/swagger-ui/5.1.0/swagger-ui-bundle.min.js",
-        swagger_css_url="https://cdn.staticfile.net/swagger-ui/5.1.0/swagger-ui.min.css")
-
-applications.get_swagger_ui_html = swagger_monkey_patch # type: ignore
 
 
 def create_app(origins: list):
@@ -44,35 +33,31 @@ app = create_app(get_origins(1))
 # 挂载静态文件目录，模拟静态资源服务器
 # app.mount("/tmp", StaticFiles(directory="tmp"), name="static")
 
-# 挂载路由
-from agv_server.agv_api import router as agv_api
+print("挂载路由...")
+from .agv_api import router as agv_api
 app.include_router(agv_api, prefix="", tags=["agv_api"])
 
 
 # 启动服务器
 def run_uvcorn(cfg: AppConfig):
-    # print(config.to_dict())
     print(f"服务地址：{cfg.hostname}")
     uvicorn.run(
         cfg.uvicorn_app_url,
         host=cfg.host,
-        port=cfg.port, 
-        # reload=bool(1),
-        # reload_dirs="./backend",
-        # reload_delay=3, 
-        # log_level=logging.WARN,
+        port=cfg.port,
     )
 
 
 def main(args=[]):
     port = 29000
     cfg = AppConfig(
-        "app:app",
+        "agv_server.app:app",
         is_encrypt=0,
         port=port,
     )
+    print("启动服务...")
     run_uvcorn(cfg)
-    # print("关闭服务...")
+    print("关闭服务...")
 
 
 if __name__ == '__main__':
