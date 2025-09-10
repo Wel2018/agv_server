@@ -3,9 +3,10 @@ import json
 import time
 from rich import print
 # from pprint import pprint as print
+from .agv_base import AgvBase
 
 
-class AgvSocket:
+class AgvYunjiSock:
     host = '192.168.10.10'
     port = 31001
 
@@ -43,11 +44,12 @@ class AgvSocket:
         self.cli.close()
 
 
-class AgvWrapper:
+class AgvYunjiWater(AgvBase):
+    """云迹科技-Water 底盘"""
 
-    def __init__(self) -> None:
-        self.sock = AgvSocket()
-        
+    def __init__(self, cfg=dict()) -> None:
+        super().__init__(cfg)
+        self.sock = AgvYunjiSock()
 
     def _send_cmd(self, cmd: str):
         return self.sock.req(cmd)

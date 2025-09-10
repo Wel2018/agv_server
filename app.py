@@ -4,18 +4,12 @@ import platform
 import signal
 import uvicorn
 import logging
-from fastapi.staticfiles import StaticFiles
-from fastapi import FastAPI
-# from fastapi.responses import *
-# from fastapi import *
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from rich import print
-import multiprocessing as mp
-import asyncio
 from config import AppConfig, get_origins
 
-
+from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import applications
 from fastapi.openapi.docs import get_swagger_ui_html
 
@@ -51,8 +45,8 @@ app = create_app(get_origins(1))
 # app.mount("/tmp", StaticFiles(directory="tmp"), name="static")
 
 # 挂载路由
-from api import router as agv_api
-app.include_router(agv_api, prefix="/ctl", tags=["agv_api"])
+from agv_server.agv_api import router as agv_api
+app.include_router(agv_api, prefix="", tags=["agv_api"])
 
 
 # 启动服务器
@@ -63,17 +57,17 @@ def run_uvcorn(cfg: AppConfig):
         cfg.uvicorn_app_url,
         host=cfg.host,
         port=cfg.port, 
-        reload=bool(1),
+        # reload=bool(1),
         # reload_dirs="./backend",
         # reload_delay=3, 
-        log_level=logging.WARN,
+        # log_level=logging.WARN,
     )
 
 
 def main(args=[]):
     port = 29000
     cfg = AppConfig(
-        "main:app",
+        "app:app",
         is_encrypt=0,
         port=port,
     )
