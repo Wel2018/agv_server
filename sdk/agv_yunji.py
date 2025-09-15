@@ -49,9 +49,11 @@ class AgvYunjiSock:
 class AgvYunjiWater(AgvBase):
     """云迹科技-Water 底盘"""
 
-    def __init__(self, cfg=dict()) -> None:
+    def __init__(self, cfg=dict(connect_now=1)) -> None:
         super().__init__(cfg)
         self.sock = AgvYunjiSock()
+        if self.cfg['connect_now']:
+            self.sock.connect()
 
     def _send_cmd(self, cmd: str):
         return self.sock.req(cmd)

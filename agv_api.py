@@ -3,6 +3,7 @@ import json
 import time
 from fastapi import APIRouter
 from fastapi import WebSocket
+from fastapi import WebSocketDisconnect
 # from attrs import asdict, define, field
 router = APIRouter()
 from .sdk.agv_yunji import AgvYunjiWater
@@ -35,16 +36,74 @@ def parse_res(res: str):
         return {"res": res}
     
 
-@router.get("/get_robot_status", summary="获取当前状态")
-def get_robot_res():
+@router.get("/get_curr", summary="获取当前的底盘状态")
+async def get_curr():
     res = GData.agv.get_robot_status()
     res = parse_res(res)
     print(f"get_robot_status: {res}")
     return create_reply(res)
 
 
+# @router.websocket("/get_curr_ws")
+# async def get_curr_ws(ws: WebSocket):
+#     await ws.accept()
+#     try:
+#         while 1:
+#             res = GData.agv.get_robot_status()
+#             res = parse_res(res)
+#             # print(res)
+#             # msg = await ws.receive_text()
+#             await ws.send_text(json.dumps(res))
+#             await asyncio.sleep(30/1000)
+#             # print(f"msg={msg}")
+#     except Exception as e:
+#         print(f"ws closed: {e}")
+
+
+@router.websocket("/get_curr_ws")
+async def get_curr_ws(ws: WebSocket):
+    await ws.accept()
+
+    async def send_loop():
+        """循环发送数据给客户端"""
+        while True:
+            res = GData.agv.get_robot_status()
+            res = parse_res(res)
+            await ws.send_text(json.dumps(res))
+            await asyncio.sleep(0.03)  # 30ms
+
+    async def receive_loop():
+        """循环接收客户端消息"""
+        while True:
+            try:
+                msg = await ws.receive_text()
+                print(f"Received from client: {msg}")
+                # TODO: 可以根据 msg 内容做处理，例如控制机器人等
+            except WebSocketDisconnect:
+                print("WebSocket disconnected (receive)")
+                break
+            except Exception as e:
+                print(f"Receive error: {e}")
+                break
+
+    # 创建两个并发任务
+    send_task = asyncio.create_task(send_loop())
+    recv_task = asyncio.create_task(receive_loop())
+
+    # 等待任一任务结束
+    done, pending = await asyncio.wait(
+        [send_task, recv_task],
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+
+    # 清理另一个未完成的任务
+    for task in pending:
+        task.cancel()
+    print("WebSocket closed")
+
+
 @router.get("/get_p", summary="获取参数")
-def get_p():
+async def get_p():
     res = GData.agv.get_p()
     res = parse_res(res)
     print(f"get_p: {res}")
@@ -52,14 +111,14 @@ def get_p():
 
 
 @router.get("/marker_query", summary="列举地图位置")
-def marker_query():
+async def marker_query():
     res = GData.agv.marker_query()
     res = parse_res(res)
     print(f"marker_query: {res}")
     return create_reply(res)
 
 @router.get("/list_map", summary="列举地图位置")
-def list_map():
+async def list_map():
     res = GData.agv.list_map()
     res = parse_res(res)
     print(f"list_map: {res}")
@@ -67,7 +126,7 @@ def list_map():
 
 
 @router.get("/cancel_move", summary="取消移动")
-def cancel_move():
+async def cancel_move():
     res = GData.agv.cancel_move()
     res = parse_res(res)
     print(f"cancel_move: {res}")
@@ -75,7 +134,7 @@ def cancel_move():
 
 
 @router.post("/set_p", summary="配置参数")
-def set_p(data: dict):
+async def set_p(data: dict):
     res = {}
     for k in data.keys():
         v = data[k]
@@ -86,7 +145,7 @@ def set_p(data: dict):
 
 
 @router.post("/force_stop", summary="急停")
-def force_stop(data: dict):
+async def force_stop(data: dict):
     flag = data.get("flag", 1)
     res = GData.agv.force_stop(flag)
     res = parse_res(res)
@@ -95,7 +154,7 @@ def force_stop(data: dict):
 
 
 @router.post("/nav_to_target", summary="导航到指定位置")
-def nav_to_target(data: dict):
+async def nav_to_target(data: dict):
     name = data.get("name", "charge")
     res = GData.agv.nav_to_target(name)
     res = parse_res(res)
@@ -104,7 +163,7 @@ def nav_to_target(data: dict):
 
 
 @router.post("/velocity_control", summary="速度控制")
-def velocity_control(data: dict):
+async def velocity_control(data: dict):
     linear_v = data.get("linear_v", 0)
     angular_v = data.get("angular_v", 0)
     res = GData.agv.velocity_control(linear_v, angular_v)
@@ -114,7 +173,7 @@ def velocity_control(data: dict):
 
 
 @router.get("/velocity_control_stop", summary="速度控制-停")
-def velocity_control_stop():
+async def velocity_control_stop():
     res = GData.agv.velocity_control_stop()
     res = parse_res(res)
     print(f"velocity_control_stop: {res}")

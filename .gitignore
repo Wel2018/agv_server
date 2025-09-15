@@ -99,3 +99,4 @@ third_library/**
 **/third_party/**
 echarts.min.js
 test.ipynb
+openapi.json
