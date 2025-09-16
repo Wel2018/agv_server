@@ -44,22 +44,6 @@ async def get_curr():
     return create_reply(res)
 
 
-# @router.websocket("/get_curr_ws")
-# async def get_curr_ws(ws: WebSocket):
-#     await ws.accept()
-#     try:
-#         while 1:
-#             res = GData.agv.get_robot_status()
-#             res = parse_res(res)
-#             # print(res)
-#             # msg = await ws.receive_text()
-#             await ws.send_text(json.dumps(res))
-#             await asyncio.sleep(30/1000)
-#             # print(f"msg={msg}")
-#     except Exception as e:
-#         print(f"ws closed: {e}")
-
-
 @router.websocket("/get_curr_ws")
 async def get_curr_ws(ws: WebSocket):
     await ws.accept()
@@ -172,36 +156,9 @@ async def velocity_control(data: dict):
     return create_reply(res)
 
 
-@router.get("/velocity_control_stop", summary="速度控制-停")
+@router.get("/velocity_control_stop", summary="速度控制正常停止")
 async def velocity_control_stop():
     res = GData.agv.velocity_control_stop()
     res = parse_res(res)
     print(f"velocity_control_stop: {res}")
     return create_reply(res)
-
-
-@router.websocket("/velocity_control_ws")
-async def velocity_control_ws(websocket: WebSocket):
-    """实时速度控制，并实时返回机器人坐标和状态信息
-    当前只适配一个客户端的情况
-    """
-    await websocket.accept()
-    try:
-        while True:
-            # 实时速度控制
-            data = await websocket.receive_text()
-            cmd_dict: dict = eval(json.loads(data))
-            linear_v = cmd_dict.get("linear_v", 0)
-            angular_v = cmd_dict.get("angular_v", 0)
-            res = GData.agv.velocity_control(linear_v, angular_v)
-            res = parse_res(res)
-            print(f"velocity_control: {res}")
-            
-            # 返回机器人坐标和状态信息
-            # data = json.dumps(data)
-            status = GData.agv.get_robot_status()
-            await websocket.send_text(status)
-            # print(time.time(), state)
-            await asyncio.sleep(5/1000)  # 每 5ms 发送一次
-    except Exception as e:
-        print(f"[velocity_control_ws] error: {e}")
