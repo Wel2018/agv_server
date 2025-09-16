@@ -34,8 +34,8 @@ app = create_app(get_origins(1))
 # app.mount("/tmp", StaticFiles(directory="tmp"), name="static")
 
 print("挂载路由...")
-from .agv_api import router as agv_api
-app.include_router(agv_api, prefix="", tags=["agv_api"])
+from .agv_api import router as agv_water
+app.include_router(agv_water, prefix="", tags=["agv_water"])
 
 
 # 启动服务器
