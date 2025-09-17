@@ -51,18 +51,26 @@ async def get_curr_ws(ws: WebSocket):
     async def send_loop():
         """循环发送数据给客户端"""
         while True:
-            res = GData.agv.get_robot_status()
-            res = parse_res(res)
-            await ws.send_text(json.dumps(res))
-            await asyncio.sleep(0.03)  # 30ms
+            try:
+                res = GData.agv.get_robot_status()
+                res = parse_res(res)
+                # print(f"send_loop={res}")
+                await ws.send_text(json.dumps(res))
+                await asyncio.sleep(0.03)  # 30ms
+            except WebSocketDisconnect:
+                print("WebSocket disconnected (send)")
+                break
 
-    async def receive_loop():
+    async def recv_loop():
         """循环接收客户端消息"""
         while True:
             try:
                 msg = await ws.receive_text()
-                print(f"Received from client: {msg}")
-                # TODO: 可以根据 msg 内容做处理，例如控制机器人等
+                print(f"receive_loop: {msg}")
+                data = eval(msg)
+                res = GData.agv.velocity_control(data["linear_v"], data["angular_v"])
+                print("recv_loop res=", res)
+                # await asyncio.sleep(0.03)  # 30ms
             except WebSocketDisconnect:
                 print("WebSocket disconnected (receive)")
                 break
@@ -72,7 +80,7 @@ async def get_curr_ws(ws: WebSocket):
 
     # 创建两个并发任务
     send_task = asyncio.create_task(send_loop())
-    recv_task = asyncio.create_task(receive_loop())
+    recv_task = asyncio.create_task(recv_loop())
 
     # 等待任一任务结束
     done, pending = await asyncio.wait(
