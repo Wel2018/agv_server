@@ -4,10 +4,39 @@ import time
 from fastapi import APIRouter
 from fastapi import WebSocket
 from fastapi import WebSocketDisconnect
+from fastapi.responses import StreamingResponse
 # from attrs import asdict, define, field
 router = APIRouter()
 from .sdk.agv_yunji import AgvYunjiWater
 from rich import print
+
+
+import cv2
+cap = cv2.VideoCapture(0)
+
+
+def gen_frames():
+    while True:
+        success, frame = cap.read()
+        if not success:
+            break
+        else:
+            # 转换为 JPEG 格式
+            ret, buffer = cv2.imencode('.jpg', frame)
+            if not ret:
+                continue
+            # 使用 yield 逐帧输出 MJPEG 流
+            yield (
+                b'--frame\r\n'
+                b'Content-Type: image/jpeg\r\n\r\n' +
+                buffer.tobytes() +
+                b'\r\n'
+            )
+
+
+@router.get("/video")
+def video_feed():
+    return StreamingResponse(gen_frames(), media_type="multipart/x-mixed-replace; boundary=frame")
 
 
 def create_reply(data: dict = {}, is_ok=1):
@@ -40,7 +69,7 @@ def parse_res(res: str):
 async def get_curr():
     res = GData.agv.get_robot_status()
     res = parse_res(res)
-    print(f"get_robot_status: {res}")
+    # print(f"get_robot_status: {res}")
     return create_reply(res)
 
 
@@ -56,7 +85,7 @@ async def get_curr_ws(ws: WebSocket):
                 res = parse_res(res)
                 # print(f"send_loop={res}")
                 await ws.send_text(json.dumps(res))
-                await asyncio.sleep(0.03)  # 30ms
+                await asyncio.sleep(0.1)  # 30ms
             except WebSocketDisconnect:
                 print("WebSocket disconnected (send)")
                 break
@@ -66,10 +95,10 @@ async def get_curr_ws(ws: WebSocket):
         while True:
             try:
                 msg = await ws.receive_text()
-                print(f"receive_loop: {msg}")
+                # print(f"receive_loop: {msg}")
                 data = eval(msg)
                 res = GData.agv.velocity_control(data["linear_v"], data["angular_v"])
-                print("recv_loop res=", res)
+                # print("recv_loop res=", res)
                 # await asyncio.sleep(0.03)  # 30ms
             except WebSocketDisconnect:
                 print("WebSocket disconnected (receive)")
@@ -124,6 +153,13 @@ async def cancel_move():
     print(f"cancel_move: {res}")
     return create_reply(res)
 
+
+@router.post("/cmd", summary="cmd")
+async def cmd(data: dict):
+    """直接运行指令"""
+    res = GData.agv._send_cmd(data['cmd'])
+    res = parse_res(res)
+    return create_reply(res)
 
 @router.post("/set_p", summary="配置参数")
 async def set_p(data: dict):

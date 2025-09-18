@@ -45,6 +45,7 @@ def run_uvcorn(cfg: AppConfig):
         cfg.uvicorn_app_url,
         host=cfg.host,
         port=cfg.port,
+        access_log=False,  # 取消冗余日志
     )
 
 
