@@ -30,7 +30,22 @@ class AgvYunjiSock:
         self.cli.send(cmd.encode('utf-8'))
 
         #接收底盘返回
-        res = self.cli.recv(1024).decode()
+        def recv_all(delimiter=b'\n'):
+            data = b''
+            while 1:
+                chunk = self.cli.recv(1024)
+                if not chunk:
+                    break
+                
+                print(chunk)
+                data += chunk
+                if delimiter in data:
+                    return data[:-len(delimiter)]
+            return data.decode()
+        
+
+        # res = self.cli.recv(1024).decode()
+        res = recv_all()
         # data = eval(data)
         # print(data)
 
