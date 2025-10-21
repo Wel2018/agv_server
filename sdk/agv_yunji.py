@@ -6,59 +6,108 @@ from rich import print
 from .agv_base import AgvBase
 
 
+#接收底盘返回
+# def recv_all(sock: socket.socket, delimiter=b'\n'):
+#     data = b''
+#     while 1:
+#         chunk = sock.recv(1024)
+#         if not chunk:
+#             break
+        
+#         print(chunk)
+#         data += chunk
+#         if delimiter in data:
+#             return data[:-len(delimiter)]
+#     return data.decode()
+
+
+# def stream_json_reader(sock: socket.socket, buffer_size: int = 4096):
+#     """
+#     从socket流中连续读取，以'\n'分隔的JSON包
+#     """
+#     buffer = b""
+#     while True:
+#         chunk = sock.recv(buffer_size)
+#         if not chunk:
+#             print("连接已关闭")
+#             break
+
+#         buffer += chunk
+
+#         while True:
+#             newline_pos = buffer.find(b'\n')
+#             if newline_pos == -1:
+#                 break  # 没有完整数据包
+
+#             line = buffer[:newline_pos].strip()
+#             buffer = buffer[newline_pos + 1:]
+
+#             if not line:
+#                 continue
+
+#             try:
+#                 data = json.loads(line.decode("utf-8"))
+#                 yield data
+#             except json.JSONDecodeError:
+#                 # 数据损坏，丢弃
+#                 continue
+
+
 class AgvYunjiSock:
-    host = '192.168.10.10'
+    host = "192.168.10.10"
     port = 31001
 
-    def __init__(self) -> None:
-        self.cli = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    def __init__(self):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     def connect(self):
-        self.cli.connect((self.host, self.port))
+        self.sock.connect((self.host, self.port))
+        print(f"✅ 已连接到 {self.host}:{self.port}")
+
+    def _recv_until_json(self, buffer_size=4096):
+        """
+        持续从socket读取，直到接收完整的以'\n'结尾的JSON数据
+        """
+        buffer = b""
+        while True:
+            chunk = self.sock.recv(buffer_size)
+            if not chunk:
+                raise ConnectionError("连接已关闭")
+
+            buffer += chunk
+            # 查找换行符，作为一个完整JSON包的结束
+            newline_pos = buffer.find(b'\n')
+            if newline_pos != -1:
+                line = buffer[:newline_pos].strip()
+                buffer = buffer[newline_pos + 1:]
+                if not line:
+                    continue
+                try:
+                    return json.loads(line.decode('utf-8'))
+                except json.JSONDecodeError:
+                    # 数据损坏或不完整，继续等待
+                    continue
+
 
     def req(self, cmd: str):
-        #查询底盘的地图列表指令
-        # point = '/api/map/list'
-        # point = '/api/map/list_info'
-        # point = '/api/software/check_for_update'
-        # point = '/api/request_data?topic=robot_status&frequency=1'
-        # point = '/api/robot_status'
-        # point = '/api/diagnosis/get_result'
-        # point = '/api/get_power_status'
+        """
+        发送命令并返回完整JSON响应
+        """
+        # if not cmd.endswith("\n"):
+        #     cmd += "\n"
+        self.sock.send(cmd.encode("utf-8"))
+        print(f"➡️ 发送指令: {cmd.strip()}")
+        data = self._recv_until_json()
+        # print(f"⬅️ 收到完整包: {data.get('command')}")
+        print(f"⬅️ 收到完整包: {data}")
+        return data
 
-        #发送指令
-        self.cli.send(cmd.encode('utf-8'))
-
-        #接收底盘返回
-        def recv_all(delimiter=b'\n'):
-            data = b''
-            while 1:
-                chunk = self.cli.recv(1024)
-                if not chunk:
-                    break
-                
-                print(chunk)
-                data += chunk
-                if delimiter in data:
-                    return data[:-len(delimiter)]
-            return data.decode()
-        
-
-        # res = self.cli.recv(1024).decode()
-        res = recv_all()
-        # data = eval(data)
-        # print(data)
-
-        # point2= '/api/move?marker=071901'
-        # cli.send(point2.encode('utf-8'))
-        # data1 = cli.recv(1024).decode()
-        # point3='/api/move?marker=071902'
-        # cli.send(point3.encode('utf-8'))
-        # data1 = cli.recv(1024).decode()
-        return res
+    def close(self):
+        self.sock.close()
+        print("🔌 连接已关闭")
 
     def __del__(self):
-        self.cli.close()
+        self.close()
 
 
 class AgvYunjiWater(AgvBase):
@@ -69,11 +118,19 @@ class AgvYunjiWater(AgvBase):
         self.sock = AgvYunjiSock()
         if self.cfg['connect_now']:
             self.sock.connect()
+        # self.sock.start_listener(callback=self._on_packet)
+
+    def __del__(self):
+        # self.sock.stop_listener()
+        self.sock.close()
+
+    # def _on_packet(self, packet):
+    #     print("⬅️ 收到数据:", packet)
 
     def _send_cmd(self, cmd: str):
         return self.sock.req(cmd)
     
-    def nav_to_target(self, name: str):
+    def nav_to_target(self, name: str) -> None:
         """导航到指定位置"""
         return self._send_cmd(cmd=f"/api/move?marker={name}")
 
