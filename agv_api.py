@@ -1,42 +1,34 @@
 import asyncio
 import json
 import time
+from typing import Any
+import cv2
 from fastapi import APIRouter
 from fastapi import WebSocket
 from fastapi import WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 # from attrs import asdict, define, field
 router = APIRouter()
-from .sdk.agv_yunji import AgvYunjiWater
 from rich import print
+from .sdk.agv_yunji import AgvYunjiWater
+from .sdk.hand import DexterousHand
+from .sdk.realman_arm import RealmanArmClient
+from .sdk.realsense_cam import RealSenseCam
 
 
-import cv2
-cap = cv2.VideoCapture(0)
+#########################################################################
+# 全局数据
 
-
-def gen_frames():
-    while True:
-        success, frame = cap.read()
-        if not success:
-            break
-        else:
-            # 转换为 JPEG 格式
-            ret, buffer = cv2.imencode('.jpg', frame)
-            if not ret:
-                continue
-            # 使用 yield 逐帧输出 MJPEG 流
-            yield (
-                b'--frame\r\n'
-                b'Content-Type: image/jpeg\r\n\r\n' +
-                buffer.tobytes() +
-                b'\r\n'
-            )
-
-
-@router.get("/video")
-def video_feed():
-    return StreamingResponse(gen_frames(), media_type="multipart/x-mixed-replace; boundary=frame")
+class GData:
+    arm_L = RealmanArmClient("192.168.10.20")
+    arm_R = RealmanArmClient("192.168.10.19")
+    hand = DexterousHand("192.168.10.19")
+    agv = AgvYunjiWater()
+    cam = RealSenseCam()
+    print("✅ GData 初始化完成")
+    shared_data: dict[str, Any] = {
+        "fall_detector_status": 0
+    }
 
 
 def create_reply(data: dict = {}, is_ok=1):
@@ -49,11 +41,6 @@ def create_reply(data: dict = {}, is_ok=1):
     return data
 
 
-class GData:
-    agv = AgvYunjiWater()
-    print("agv init")
-
-
 def parse_res(res: str):
     try:
         res = res.replace("true", "True")
@@ -63,7 +50,80 @@ def parse_res(res: str):
         return res_dict
     except Exception as e:
         return {"res": res}
-    
+
+
+#########################################################################
+# 机械臂
+
+@router.post("/arm_control", summary="机械臂控制")
+async def arm_control(data: dict):
+    res = {}
+    ret, pose_L = GData.arm_L.get_pose()
+    ret, pose_R = GData.arm_R.get_pose()
+    res["pose_L"] = pose_L
+    res["pose_R"] = pose_R
+    return create_reply(res)
+
+
+#########################################################################
+# 灵巧手/夹爪
+
+@router.post("/gripper_control", summary="夹爪控制")
+async def gripper_control(data: dict):
+    res = {}
+    GData.arm_L.gripper_open()
+    GData.arm_L.gripper_close()
+    return create_reply(res)
+
+
+@router.post("/hand_control", summary="灵巧手控制")
+async def hand_control(data: dict):
+    res = {}
+    GData.hand.open_all()
+    GData.hand.close_all()
+    GData.hand.close_finger(0, 50)
+    return create_reply(res)
+
+
+#########################################################################
+# 读取 D535 摄像头数据
+
+
+def gen_frames():
+    while True:
+        data = GData.cam.read() # type: ignore
+        if len(data) == 0:
+            continue
+        
+        frame = data['color']
+        # success, frame = cap.read()
+        # if not success:
+        #     break
+        # else:
+        # 转换为 JPEG 格式
+        ret, buffer = cv2.imencode('.jpg', frame)
+
+        if not ret:
+            continue
+
+        # 使用 yield 逐帧输出 MJPEG 流
+        yield (
+            b'--frame\r\n'
+            b'Content-Type: image/jpeg\r\n\r\n' +
+            buffer.tobytes() +
+            b'\r\n'
+        )
+
+
+@router.get("/video")
+def video_feed():
+    return StreamingResponse(
+        gen_frames(), 
+        media_type="multipart/x-mixed-replace; boundary=frame")
+
+
+#########################################################################
+# 底盘
 
 @router.get("/get_curr", summary="获取当前的底盘状态")
 async def get_curr():
@@ -138,6 +198,7 @@ async def marker_query():
     print(f"marker_query: {res}")
     return create_reply(res)
 
+
 @router.get("/list_map", summary="列举地图位置")
 async def list_map():
     res = GData.agv.list_map()
@@ -160,6 +221,7 @@ async def cmd(data: dict):
     res = GData.agv._send_cmd(data['cmd'])
     res = parse_res(res)
     return create_reply(res)
+
 
 @router.post("/set_p", summary="配置参数")
 async def set_p(data: dict):
@@ -185,7 +247,7 @@ async def force_stop(data: dict):
 async def nav_to_target(data: dict):
     name = data.get("name", "charge")
     res = GData.agv.nav_to_target(name)
-    res = parse_res(res)
+    res = parse_res(res) # type: ignore
     print(f"nav_to_target: {res}")
     return create_reply(res)
 
@@ -206,3 +268,47 @@ async def velocity_control_stop():
     res = parse_res(res)
     print(f"velocity_control_stop: {res}")
     return create_reply(res)
+
+
+#########################################################################
+# 测试接口
+
+@router.get("/get_data", summary="获取数据")
+async def get_data():
+    """获取共享数据
+    ```json
+    {
+      "fall_detector_status": 0,  # 跌倒检测状态
+      "agv": {  # 底盘状态
+        "command": "/api/robot_status",
+        ...
+      },
+      "arm_L": {  # 左臂状态
+         ...
+      },
+      "arm_R": {  # 右臂状态
+        "joint": [],
+        "pose": [],
+        "err": ..
+      }
+    }
+    ```
+    """
+    # 将底盘状态写入
+    GData.shared_data["agv"] = GData.agv.get_robot_status()
+    # GData.shared_data["arm"] = GData.arm_L.get_pose()
+    ret, pose_L = GData.arm_L.get_pose()
+    ret, pose_R = GData.arm_R.get_pose()
+    GData.shared_data.update({
+        "arm_L": pose_L,
+        "arm_R": pose_R,
+    })
+    return create_reply(GData.shared_data)
+
+
+@router.post("/set_data", summary="写入数据")
+async def set_data(data: dict):
+    print(f"set_data: data={data}")
+    GData.shared_data.update(data)
+    # print(f"shared_data={GData.shared_data}")
+    return create_reply(GData.shared_data)

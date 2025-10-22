@@ -1,2 +1,5 @@
 fastapi
 rich
+uvicorn
+opencv-python
+opencv-contrib-python

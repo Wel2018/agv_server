@@ -21,36 +21,36 @@ from .agv_base import AgvBase
 #     return data.decode()
 
 
-# def stream_json_reader(sock: socket.socket, buffer_size: int = 4096):
-#     """
-#     从socket流中连续读取，以'\n'分隔的JSON包
-#     """
-#     buffer = b""
-#     while True:
-#         chunk = sock.recv(buffer_size)
-#         if not chunk:
-#             print("连接已关闭")
-#             break
+def stream_json_reader(sock: socket.socket, buffer_size: int = 4096):
+    """
+    从socket流中连续读取，以'\n'分隔的JSON包
+    """
+    buffer = b""
+    while True:
+        chunk = sock.recv(buffer_size)
+        if not chunk:
+            print("连接已关闭")
+            break
 
-#         buffer += chunk
+        buffer += chunk
 
-#         while True:
-#             newline_pos = buffer.find(b'\n')
-#             if newline_pos == -1:
-#                 break  # 没有完整数据包
+        while True:
+            newline_pos = buffer.find(b'\n')
+            if newline_pos == -1:
+                break  # 没有完整数据包
 
-#             line = buffer[:newline_pos].strip()
-#             buffer = buffer[newline_pos + 1:]
+            line = buffer[:newline_pos].strip()
+            buffer = buffer[newline_pos + 1:]
 
-#             if not line:
-#                 continue
+            if not line:
+                continue
 
-#             try:
-#                 data = json.loads(line.decode("utf-8"))
-#                 yield data
-#             except json.JSONDecodeError:
-#                 # 数据损坏，丢弃
-#                 continue
+            try:
+                data = json.loads(line.decode("utf-8"))
+                yield data
+            except json.JSONDecodeError:
+                # 数据损坏，丢弃
+                continue
 
 
 class AgvYunjiSock:
@@ -62,7 +62,7 @@ class AgvYunjiSock:
 
     def connect(self):
         self.sock.connect((self.host, self.port))
-        print(f"✅ 已连接到 {self.host}:{self.port}")
+        print(f"✅ 云迹底盘已连接到 {self.host}:{self.port}")
 
     def _recv_until_json(self, buffer_size=4096):
         """
@@ -89,17 +89,18 @@ class AgvYunjiSock:
                     continue
 
 
-    def req(self, cmd: str):
+    def req(self, cmd: str, verbose=0):
         """
         发送命令并返回完整JSON响应
         """
         # if not cmd.endswith("\n"):
         #     cmd += "\n"
         self.sock.send(cmd.encode("utf-8"))
-        print(f"➡️ 发送指令: {cmd.strip()}")
+        if verbose:
+            print(f"➡️ cmd: {cmd.strip()}")
         data = self._recv_until_json()
-        # print(f"⬅️ 收到完整包: {data.get('command')}")
-        print(f"⬅️ 收到完整包: {data}")
+        if verbose:
+            print(f"⬅️ recv: {data}")
         return data
 
     def close(self):
@@ -112,6 +113,7 @@ class AgvYunjiSock:
 
 class AgvYunjiWater(AgvBase):
     """云迹科技-Water 底盘"""
+    verbose = 0
 
     def __init__(self, cfg=dict(connect_now=1)) -> None:
         super().__init__(cfg)
@@ -128,7 +130,7 @@ class AgvYunjiWater(AgvBase):
     #     print("⬅️ 收到数据:", packet)
 
     def _send_cmd(self, cmd: str):
-        return self.sock.req(cmd)
+        return self.sock.req(cmd, verbose=self.verbose)
     
     def nav_to_target(self, name: str) -> None:
         """导航到指定位置"""
