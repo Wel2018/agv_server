@@ -58,11 +58,13 @@ class AgvYunjiSock:
     port = 31001
 
     def __init__(self):
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.is_ok = 0
 
     def connect(self):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect((self.host, self.port))
         print(f"✅ 云迹底盘已连接到 {self.host}:{self.port}")
+        self.is_ok = 1
 
     def _recv_until_json(self, buffer_size=4096):
         """
@@ -95,13 +97,22 @@ class AgvYunjiSock:
         """
         # if not cmd.endswith("\n"):
         #     cmd += "\n"
-        self.sock.send(cmd.encode("utf-8"))
-        if verbose:
-            print(f"➡️ cmd: {cmd.strip()}")
-        data = self._recv_until_json()
-        if verbose:
-            print(f"⬅️ recv: {data}")
-        return data
+        for i in range(100):
+            try:
+                self.sock.send(cmd.encode("utf-8"))
+                if verbose:
+                    print(f"➡️ cmd: {cmd.strip()}")
+                data = self._recv_until_json()
+                if verbose:
+                    print(f"⬅️ recv: {data}")
+                return data
+            except Exception as e:
+                self.is_ok = 0
+                print(f"断网重连...")
+                self.close()
+                self.connect()
+                time.sleep(3)
+                # continue
 
     def close(self):
         self.sock.close()
@@ -130,9 +141,12 @@ class AgvYunjiWater(AgvBase):
     #     print("⬅️ 收到数据:", packet)
 
     def _send_cmd(self, cmd: str):
-        return self.sock.req(cmd, verbose=self.verbose)
-    
-    def nav_to_target(self, name: str) -> None:
+        ret = self.sock.req(cmd, verbose=self.verbose)
+        if not ret:
+            ret = ""
+        return ret
+
+    def nav_to_target(self, name: str):
         """导航到指定位置"""
         return self._send_cmd(cmd=f"/api/move?marker={name}")
 
